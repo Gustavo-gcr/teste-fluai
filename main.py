@@ -112,3 +112,26 @@ def evaluate_level_test(result: LevelTestResult):
         level = "C2"
     
     return {"level": level}
+# Endpoint: Gerar Atividades Baseadas no Nível do Usuário
+@app.get("/generate-activities")
+def generate_activities(token: str, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        username = payload["user"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    prompt = f"Crie 5 atividades de inglês para um usuário de nível {db_user.level}, com questões e opções de resposta."
+    response = requests.post(LLAMA_API_URL, json={"prompt": prompt})
+    
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail="Erro ao gerar atividades com a IA.")
+    
+    activities = response.json()["activities"]
+    return {"activities": activities}
