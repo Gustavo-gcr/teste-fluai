@@ -210,7 +210,7 @@ def evaluate_activities(token: str, result: LevelTestResult, db: Session = Depen
     # db_user.level = new_level
     # db.commit()
     
-    # # Atualizando o histórico com o progresso
+    # # Atualizando o histórico com o progressohttps://painel.tomticket.com/painel.html
     # db_user.progress_history += f"\n{datetime.datetime.utcnow()}: Score {score} - Avanço de {progress_percentage}% para o nível {new_level}"
     # db.commit()
     
