@@ -21,6 +21,8 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     password = Column(String)
     level = Column(String, default="A1")  # Níveis: C2, C1, B2, B1, A2, A1, A, A+
+    progress_history = Column('Text', default="")  # Armazena histórico de progresso
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -38,6 +40,10 @@ class LevelTestResponse(BaseModel):
 
 class LevelTestResult(BaseModel):
     answers: list  # Lista de respostas do usuário
+    
+class ActivityEvaluation(BaseModel):
+    answers: list
+    feedback: bool  # Indica se o usuário deseja feedback detalhado
 
 # App FastAPI
 app = FastAPI()
@@ -112,6 +118,7 @@ def evaluate_level_test(result: LevelTestResult):
         level = "C2"
     
     return {"level": level}
+
 # Endpoint: Gerar Atividades Baseadas no Nível do Usuário
 @app.get("/generate-activities")
 def generate_activities(token: str, db: Session = Depends(get_db)):
@@ -127,7 +134,18 @@ def generate_activities(token: str, db: Session = Depends(get_db)):
     if not db_user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     
-    prompt = f"Crie 5 atividades de inglês para um usuário de nível {db_user.level}, com questões e opções de resposta."
+    prompt = f"""
+        Crie 20 atividades de inglês para um usuário de nível {db_user.level}, variando entre os seguintes formatos:
+        1. Questões de múltipla escolha
+        2. Preenchimento de lacunas
+        3. Respostas curtas (o usuário escreve uma pequena frase)
+        4. Construção de frases com palavras embaralhadas
+        5. Reordenação de palavras para formar frases corretas
+        6. Interpretação de um pequeno texto com perguntas abertas
+
+        As respostas corretas também devem ser fornecidas para posterior correção automática.
+        """
+    #Verificar com o front-end: definir um formato fixo para os dados que a API retorna, garantindo que ele consiga renderizar corretamente cada tipo de questão.
     response = requests.post(LLAMA_API_URL, json={"prompt": prompt})
     
     if response.status_code != 200:
@@ -135,6 +153,7 @@ def generate_activities(token: str, db: Session = Depends(get_db)):
     
     activities = response.json()["activities"]
     return {"activities": activities}
+
 # Endpoint: Avaliar Atividades e Atualizar Nível do Usuário
 @app.post("/evaluate-activities")
 def evaluate_activities(token: str, result: LevelTestResult, db: Session = Depends(get_db)):
@@ -170,4 +189,32 @@ def evaluate_activities(token: str, result: LevelTestResult, db: Session = Depen
         db.commit()
     
     return {"message": "Atividades corrigidas!", "new_level": db_user.level}
+
+#Endpoint: Oferecer Feedback Personalizado de cada questão(detalhando os erros, enquanto o método acima apenas da a resposta certa)
+@app.post("/evaluate-with-feedback")
+def evaluate_activities(token: str, evaluation: ActivityEvaluation, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        username = payload["user"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    prompt = {"prompt": "Corrija essas atividades e forneça um score e feedback:", "answers": evaluation.answers}
+    response = requests.post(LLAMA_API_URL, json=prompt)
+    
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail="Erro ao corrigir atividades com a IA.")
+    
+    result = response.json()
+    db_user.progress_history += f"\n{datetime.datetime.utcnow()}: Score {result['score']}"
+    db.commit()
+    
+    return {"score": result["score"], "feedback": result["feedback"] if evaluation.feedback else "Feedback desativado"}
+
 
