@@ -187,6 +187,33 @@ def evaluate_activities(token: str, result: LevelTestResult, db: Session = Depen
         }.get(db_user.level, db_user.level)
         db_user.level = new_level
         db.commit()
+   
+   
+    #verificar se ira usar 
+    # Calculando a porcentagem de avanço
+    # level_mapping = {
+    #     "C2": 0,
+    #     "C1": 10,
+    #     "B2": 20,
+    #     "B1": 30,
+    #     "A2": 40,
+    #     "A1": 50,
+    #     "A": 70,
+    #     "A+": 90
+    # }
+
+    # previous_score = level_mapping.get(db_user.level, 0)
+    # current_score = level_mapping.get(new_level, 0)
+    
+    # progress_percentage = current_score - previous_score
+
+    # db_user.level = new_level
+    # db.commit()
+    
+    # # Atualizando o histórico com o progresso
+    # db_user.progress_history += f"\n{datetime.datetime.utcnow()}: Score {score} - Avanço de {progress_percentage}% para o nível {new_level}"
+    # db.commit()
+    
     
     return {"message": "Atividades corrigidas!", "new_level": db_user.level}
 
@@ -234,4 +261,5 @@ def get_progress_history(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     
     return {"history": db_user.progress_history.split("\n") if db_user.progress_history else []}
+
 
