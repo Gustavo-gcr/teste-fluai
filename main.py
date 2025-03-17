@@ -135,3 +135,39 @@ def generate_activities(token: str, db: Session = Depends(get_db)):
     
     activities = response.json()["activities"]
     return {"activities": activities}
+# Endpoint: Avaliar Atividades e Atualizar Nível do Usuário
+@app.post("/evaluate-activities")
+def evaluate_activities(token: str, result: LevelTestResult, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        username = payload["user"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    prompt = {
+        "prompt": "Corrija essas atividades e forneça um score baseado na precisão: ",
+        "answers": result.answers
+    }
+    response = requests.post(LLAMA_API_URL, json=prompt)
+    
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail="Erro ao corrigir atividades com a IA.")
+    
+    score = response.json()["score"]
+    
+    if score >= 80:
+        new_level = {
+            "C2": "C1", "C1": "B2", "B2": "B1", "B1": "A2", "A2": "A1",
+            "A1": "A", "A": "A+", "A+": "A+"
+        }.get(db_user.level, db_user.level)
+        db_user.level = new_level
+        db.commit()
+    
+    return {"message": "Atividades corrigidas!", "new_level": db_user.level}
+
