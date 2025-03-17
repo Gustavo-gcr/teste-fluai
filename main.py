@@ -218,3 +218,20 @@ def evaluate_activities(token: str, evaluation: ActivityEvaluation, db: Session 
     return {"score": result["score"], "feedback": result["feedback"] if evaluation.feedback else "Feedback desativado"}
 
 
+# Endpoint: Consultar Histórico de Progresso
+@app.get("/progress-history")
+def get_progress_history(token: str, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        username = payload["user"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    return {"history": db_user.progress_history.split("\n") if db_user.progress_history else []}
+
